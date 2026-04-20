@@ -5,8 +5,6 @@ import threading
 import time
 
 DB_NAME = "data.db"
-
-# 🔥 THREAD LOCK
 lock = threading.Lock()
 
 # ================= CONNECTION =================
@@ -14,24 +12,22 @@ def get_conn():
     conn = sqlite3.connect(DB_NAME, check_same_thread=False)
     conn.row_factory = sqlite3.Row
 
-    # 🔥 PERFORMANCE
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA synchronous=NORMAL;")
-    conn.execute("PRAGMA temp_store=MEMORY;")
     conn.execute("PRAGMA foreign_keys=ON;")
 
     return conn
 
 
 # ================= SAFE EXECUTE =================
-def safe_execute(cur, query, params=(), retry=3):
+def safe_execute(cur, query, params=(), retry=5):
     for _ in range(retry):
         try:
             cur.execute(query, params)
             return
         except sqlite3.OperationalError as e:
             if "locked" in str(e):
-                time.sleep(0.2)
+                time.sleep(0.1)
             else:
                 raise
     raise Exception("DB LOCK ERROR")
@@ -77,16 +73,14 @@ def init_db():
         )
         """)
 
-        # 🔥 INDEX
         c.execute("CREATE INDEX IF NOT EXISTS idx_cid ON appeals(cid)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_status ON appeals(status)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_user ON appeals(user_id)")
 
 
 # ================= ROLE =================
 def set_role(uid, role):
     with db() as c:
-        safe_execute(
-            c,
+        safe_execute(c,
             "INSERT OR REPLACE INTO users (id, role) VALUES (?,?)",
             (int(uid), role)
         )
@@ -94,8 +88,7 @@ def set_role(uid, role):
 
 def delete_admin(uid):
     with db() as c:
-        safe_execute(
-            c,
+        safe_execute(c,
             "DELETE FROM users WHERE id=? AND role='admin'",
             (int(uid),)
         )
@@ -119,18 +112,18 @@ def add_appeal(data, custom_cid=None):
     now = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
 
     with db() as c:
+        # 🔥 OLDIN BO‘SH CID INSERT
         safe_execute(c, """
-        INSERT INTO appeals(user_id,name,phone,address,message,status,created)
-        VALUES (?,?,?,?,?,?,?)
-        """, (*data, "Yangi", now))
+        INSERT INTO appeals(user_id,name,phone,address,message,status,created,cid)
+        VALUES (?,?,?,?,?,?,?,?)
+        """, (*data, "Yangi", now, ""))
 
         rid = c.lastrowid
 
-        # 🔥 AGAR USER CUSTOM ID BERSA
-        cid = custom_cid if custom_cid else str(rid)
+        # 🔥 CID TO‘G‘RI BERILADI
+        cid = str(custom_cid).strip() if custom_cid else str(rid)
 
-        safe_execute(
-            c,
+        safe_execute(c,
             "UPDATE appeals SET cid=? WHERE id=?",
             (cid, rid)
         )
@@ -139,18 +132,22 @@ def add_appeal(data, custom_cid=None):
 
 
 def get_appeal(cid):
+    if not cid:
+        return None
+
+    cid = str(cid).strip()
+
     with db() as c:
-        c.execute("SELECT * FROM appeals WHERE cid=?", (str(cid),))
+        c.execute("SELECT * FROM appeals WHERE cid=?", (cid,))
         row = c.fetchone()
         return dict(row) if row else None
 
 
 def update_status(cid, status):
     with db() as c:
-        safe_execute(
-            c,
+        safe_execute(c,
             "UPDATE appeals SET status=? WHERE cid=?",
-            (status, str(cid))
+            (status, str(cid).strip())
         )
 
 
@@ -160,6 +157,15 @@ def get_all_appeals(limit=50):
         c.execute(
             "SELECT * FROM appeals ORDER BY id DESC LIMIT ?",
             (limit,)
+        )
+        return [dict(row) for row in c.fetchall()]
+
+
+def get_user_appeals(user_id):
+    with db() as c:
+        c.execute(
+            "SELECT * FROM appeals WHERE user_id=? ORDER BY id DESC",
+            (user_id,)
         )
         return [dict(row) for row in c.fetchall()]
 
