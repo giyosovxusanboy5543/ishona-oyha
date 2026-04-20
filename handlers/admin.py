@@ -3,13 +3,9 @@ from aiogram.types import *
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-from db import get_appeal, update_status, get_admins
+from db import get_appeal, update_status, is_admin
 
 router = Router()
-
-# ================= CHECK ADMIN =================
-def is_admin(uid):
-    return uid in get_admins()
 
 # ================= TUGMALAR =================
 def buttons(cid):
@@ -30,22 +26,26 @@ class Answer(StatesGroup):
 # ================= JAVOB =================
 @router.callback_query(F.data.startswith("ans_"))
 async def answer_start(call: CallbackQuery, state: FSMContext):
-    await call.answer()
+    try:
+        await call.answer()
 
-    if not is_admin(call.from_user.id):
-        await call.message.answer("❌ Ruxsat yo‘q")
-        return
+        if not is_admin(call.from_user.id):
+            return await call.message.answer("❌ Ruxsat yo‘q")
 
-    cid = call.data.split("_")[1]
-    ap = get_appeal(cid)
+        cid = call.data.split("_")[1]
+        ap = get_appeal(cid)
 
-    if not ap:
-        await call.message.answer("❌ Topilmadi")
-        return
+        if not ap:
+            return await call.message.answer("❌ Topilmadi")
 
-    await state.update_data(cid=cid)
-    await call.message.answer("👤 Ism familya:")
-    await state.set_state(Answer.name)
+        await state.clear()
+        await state.update_data(cid=cid)
+
+        await call.message.answer("👤 Ism familya:")
+        await state.set_state(Answer.name)
+
+    except Exception as e:
+        print("ERROR ans_start:", e)
 
 
 @router.message(Answer.name)
@@ -71,19 +71,20 @@ async def a3(m: Message, state: FSMContext):
 
 @router.message(Answer.file)
 async def a4(m: Message, state: FSMContext):
-    if not (m.document or m.photo):
-        await m.answer("❗ Fayl yuborish majburiy")
-        return
+    try:
+        if not (m.document or m.photo):
+            return await m.answer("❗ Fayl yuborish majburiy")
 
-    data = await state.get_data()
-    cid = data["cid"]
+        data = await state.get_data()
+        cid = data["cid"]
 
-    ap = get_appeal(cid)
-    if not ap:
-        await m.answer("❌ Topilmadi")
-        return
+        ap = get_appeal(cid)
+        if not ap:
+            return await m.answer("❌ Topilmadi")
 
-    text = f"""📨 JAVOB
+        user_id = ap["user_id"]  # 🔥 FIX
+
+        text = f"""📨 JAVOB
 🆔 {cid}
 
 👤 {data['name']}
@@ -91,67 +92,74 @@ async def a4(m: Message, state: FSMContext):
 📞 {data['phone']}
 """
 
-    await m.bot.send_message(ap[2], text)
+        await m.bot.send_message(user_id, text)
 
-    if m.document:
-        await m.bot.send_document(ap[2], m.document.file_id)
-    elif m.photo:
-        await m.bot.send_photo(ap[2], m.photo[-1].file_id)
+        if m.document:
+            await m.bot.send_document(user_id, m.document.file_id)
+        elif m.photo:
+            await m.bot.send_photo(user_id, m.photo[-1].file_id)
 
-    await m.answer("✅ Yuborildi")
-    await state.clear()
+        await m.answer("✅ Yuborildi")
+        await state.clear()
+
+    except Exception as e:
+        print("ERROR ANSWER:", e)
 
 
 # ================= QABUL =================
 @router.callback_query(F.data.startswith("ok_"))
 async def ok(call: CallbackQuery):
-    await call.answer()
+    try:
+        await call.answer()
 
-    if not is_admin(call.from_user.id):
-        await call.message.answer("❌ Ruxsat yo‘q")
-        return
+        if not is_admin(call.from_user.id):
+            return await call.message.answer("❌ Ruxsat yo‘q")
 
-    cid = call.data.split("_")[1]
-    ap = get_appeal(cid)
+        cid = call.data.split("_")[1]
+        ap = get_appeal(cid)
 
-    if not ap:
-        await call.message.answer("❌ Topilmadi")
-        return
+        if not ap:
+            return await call.message.answer("❌ Topilmadi")
 
-    update_status(cid, "Jarayonda")
+        update_status(cid, "Jarayonda")
 
-    await call.bot.send_message(
-        ap[2],
-        f"⏳ Jarayonda\n🆔 {cid}"
-    )
+        await call.bot.send_message(
+            ap["user_id"],  # 🔥 FIX
+            f"⏳ Jarayonda\n🆔 {cid}"
+        )
 
-    await call.message.answer("✅ Qabul qilindi")
+        await call.message.answer("✅ Qabul qilindi")
+
+    except Exception as e:
+        print("ERROR OK:", e)
 
 
 # ================= RAD =================
 @router.callback_query(F.data.startswith("no_"))
 async def no(call: CallbackQuery):
-    await call.answer()
+    try:
+        await call.answer()
 
-    if not is_admin(call.from_user.id):
-        await call.message.answer("❌ Ruxsat yo‘q")
-        return
+        if not is_admin(call.from_user.id):
+            return await call.message.answer("❌ Ruxsat yo‘q")
 
-    cid = call.data.split("_")[1]
-    ap = get_appeal(cid)
+        cid = call.data.split("_")[1]
+        ap = get_appeal(cid)
 
-    if not ap:
-        await call.message.answer("❌ Topilmadi")
-        return
+        if not ap:
+            return await call.message.answer("❌ Topilmadi")
 
-    update_status(cid, "Rad etildi")
+        update_status(cid, "Rad etildi")
 
-    await call.bot.send_message(
-        ap[2],
-        f"❌ Rad etildi\n🆔 {cid}"
-    )
+        await call.bot.send_message(
+            ap["user_id"],  # 🔥 FIX
+            f"❌ Rad etildi\n🆔 {cid}"
+        )
 
-    await call.message.answer("❌ Rad etildi")
+        await call.message.answer("❌ Rad etildi")
+
+    except Exception as e:
+        print("ERROR NO:", e)
 
 
 # ================= DEBUG =================
