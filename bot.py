@@ -11,13 +11,13 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from handlers import user, admin
 from db import init_db, set_role
 
-# 🔥 ENV
+# 🔥 ENV (Railway Variables)
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 # 🔥 SUPER ADMIN
 SUPER_ADMIN = 2034709966
 
-# 🔥 LOGGING (PRO)
+# 🔥 LOGGING
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s"
@@ -26,9 +26,9 @@ logger = logging.getLogger(__name__)
 
 
 async def main():
-    # ❗ TOKEN CHECK
+    # ❗ TOKEN TEKSHIRUV
     if not BOT_TOKEN:
-        logger.error("❌ BOT_TOKEN topilmadi")
+        logger.error("❌ BOT_TOKEN topilmadi (Railway Variables ni tekshir)")
         sys.exit(1)
 
     # 🔥 DB INIT
@@ -38,7 +38,7 @@ async def main():
     except Exception as e:
         logger.error(f"❌ DB ERROR: {e}")
 
-    # 🔥 ADMIN INIT
+    # 🔥 SUPER ADMIN INIT
     try:
         set_role(SUPER_ADMIN, "super_admin")
         logger.info(f"👑 Super admin: {SUPER_ADMIN}")
@@ -53,7 +53,7 @@ async def main():
 
     dp = Dispatcher(storage=MemoryStorage())
 
-    # 🔗 ROUTERLAR (MUHIM: 1 MARTA)
+    # 🔗 ROUTERLAR
     dp.include_router(user.router)
     dp.include_router(admin.router)
 
@@ -67,17 +67,22 @@ async def main():
     logger.info("🚀 BOT ISHGA TUSHDI (SERVER)")
     logger.info("=================================")
 
-    try:
-        await dp.start_polling(bot)
-    finally:
-        # 🔥 CLEAN SHUTDOWN
-        await bot.session.close()
-        logger.info("🛑 Bot to‘xtadi")
+    await dp.start_polling(bot)
 
 
-# 🚀 START (TO‘G‘RI VARIANT)
+# 🔥 AUTO RESTART (SERVER YIQILMASIN)
+async def run():
+    while True:
+        try:
+            await main()
+        except Exception as e:
+            logger.error(f"🔁 RESTART: {e}")
+            await asyncio.sleep(3)
+
+
+# 🚀 START
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        asyncio.run(run())
     except (KeyboardInterrupt, SystemExit):
         logger.info("⛔ Bot to‘xtatildi")
