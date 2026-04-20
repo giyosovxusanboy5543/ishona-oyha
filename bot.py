@@ -10,27 +10,34 @@ from aiogram.enums import ParseMode
 from handlers import user, admin
 from db import init_db, set_role, get_role
 
+# ❗ Railway uchun dotenv shart emas (lekin qolsa ham zarar yo‘q)
 from dotenv import load_dotenv
 load_dotenv()
 
 API_TOKEN = os.getenv("BOT_TOKEN")
 
-# 🔥 BU YERGA O‘Z TELEGRAM ID INGNI QO‘Y
 SUPER_ADMIN = 2034709966
 
 logging.basicConfig(level=logging.INFO)
 
 
 async def main():
-    # ❗ TOKEN TEKSHIRUV
+    # ❗ TOKEN
     if not API_TOKEN:
-        raise ValueError("❌ BOT_TOKEN topilmadi (.env ni tekshir)")
+        raise ValueError("❌ BOT_TOKEN topilmadi")
 
-    # 🔥 1️⃣ DATABASE YARATAMIZ
-    init_db()
+    # 🔥 DB INIT
+    try:
+        init_db()
+        print("✅ DB OK")
+    except Exception as e:
+        print("❌ DB ERROR:", e)
 
-    # 🔥 2️⃣ SUPER ADMINNI YOZAMIZ
-    set_role(SUPER_ADMIN, "super_admin")
+    # 🔥 ADMIN INIT
+    try:
+        set_role(SUPER_ADMIN, "super_admin")
+    except Exception as e:
+        print("❌ ADMIN ERROR:", e)
 
     # 🤖 BOT
     bot = Bot(
@@ -44,6 +51,12 @@ async def main():
     dp.include_router(user.router)
     dp.include_router(admin.router)
 
+    # 🔥 GLOBAL ERROR HANDLER (server uchun)
+    @dp.errors()
+    async def error_handler(update, exception):
+        print("❌ ERROR:", exception)
+        return True
+
     # 🔍 DEBUG
     print("=================================")
     print("🚀 BOT ISHGA TUSHDI")
@@ -55,8 +68,10 @@ async def main():
     await dp.start_polling(bot)
 
 
+# 🔥 SERVERDA BOT O‘CHIB QOLMASLIGI UCHUN
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("🛑 Bot to‘xtatildi")
+    while True:
+        try:
+            asyncio.run(main())
+        except Exception as e:
+            print("🔁 RESTART:", e)
