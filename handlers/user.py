@@ -22,9 +22,7 @@ def menu():
 
 def back_btn():
     return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="⬅️ Orqaga")]
-        ],
+        keyboard=[[KeyboardButton(text="⬅️ Orqaga")]],
         resize_keyboard=True
     )
 
@@ -70,14 +68,12 @@ async def back(m: Message, state: FSMContext):
 # ================= MANZIL =================
 @router.message(F.text == "📍 Bizning manzil")
 async def location_info(m: Message):
-    await m.answer(
-        "📍 Xo‘jaobod tumani, Navoiy MFY,\n"
-        "Obihayot ko‘chasi, 1-uy"
-    )
+    await m.answer("📍 Xo‘jaobod tumani, Navoiy MFY,\nObihayot ko‘chasi, 1-uy")
 
 # ================= MUROJAAT =================
 @router.message(F.text == "📩 Murojaat")
 async def m1(m: Message, state: FSMContext):
+    await state.clear()  # 🔥 SERVER UCHUN MUHIM
     await m.answer("👤 Ism Familya:", reply_markup=back_btn())
     await state.set_state(Form.name)
 
@@ -95,11 +91,9 @@ async def m3(m: Message, state: FSMContext):
     else:
         phone = m.text
 
-    # 🔥 USERNAME QO‘SHAMIZ
     username = m.from_user.username or "yo‘q"
 
     await state.update_data(phone=phone, username=username)
-
     await m.answer("📍 Manzil yuboring:", reply_markup=location_btn())
     await state.set_state(Form.address)
 
@@ -112,7 +106,6 @@ async def m4(m: Message, state: FSMContext):
         address = m.text
 
     await state.update_data(address=address)
-
     await m.answer("📝 Murojaat matni:", reply_markup=back_btn())
     await state.set_state(Form.message)
 
@@ -129,7 +122,6 @@ async def m5(m: Message, state: FSMContext):
         m.text
     ))
 
-    # 🔥 ADMIN UCHUN MATN
     text = f"""📢 <b>YANGI MUROJAAT</b>
 🆔 {cid}
 
@@ -140,22 +132,22 @@ async def m5(m: Message, state: FSMContext):
 📝 {m.text}
 """
 
-    # adminlarga yuborish
+    # 🔥 SERVER SAFE (BOT YIQILMAYDI)
     for admin in get_admins():
-        await m.bot.send_message(admin, text, reply_markup=buttons(cid))
+        try:
+            await m.bot.send_message(
+                admin,
+                text,
+                reply_markup=buttons(cid)
+            )
+        except Exception as e:
+            print("ADMIN ERROR:", e)
 
-    # foydalanuvchiga javob
     await m.answer(
         f"""✅ <b>Murojaatingiz qabul qilindi</b>
 🆔 {cid}
 
-📌 Hurmatli fuqaro!
-
-Sizning murojaatingiz <b>Xo‘jaobod tumani suv ta’minoti</b> tomonidan qabul qilindi.
-
-📖 Qonunchilikka ko‘ra:
-15–30 ish kun ichida javob beriladi.
-
+📌 15–30 ish kun ichida javob beriladi.
 🙏 Rahmat!
 """,
         reply_markup=menu()
