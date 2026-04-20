@@ -3,22 +3,27 @@ from aiogram.types import *
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-from db import get_appeal, update_status, get_admins  # 🔥 FIX
+from db import get_appeal, update_status, get_admins
 
 router = Router()
 
+# 🔥 DOUBLE CLICK FIX
 processing = set()
 
-# 🔥 ADMIN TEKSHIRUV (DB ga bog‘liq emas)
+# 🔥 ADMIN CHECK
 def is_admin(uid):
     return uid in get_admins()
 
-# ================= TUGMALAR =================
+# ================= BUTTONS =================
 def buttons(cid):
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Qabul", callback_data=f"ok_{cid}")],
-        [InlineKeyboardButton(text="✉️ Javob", callback_data=f"ans_{cid}")],
-        [InlineKeyboardButton(text="❌ Rad", callback_data=f"no_{cid}")]
+        [
+            InlineKeyboardButton(text="✅ Qabul", callback_data=f"ok_{cid}"),
+            InlineKeyboardButton(text="❌ Rad", callback_data=f"no_{cid}")
+        ],
+        [
+            InlineKeyboardButton(text="✉️ Javob", callback_data=f"ans_{cid}")
+        ]
     ])
 
 # ================= STATE =================
@@ -29,10 +34,10 @@ class Answer(StatesGroup):
     phone = State()
     file = State()
 
-# ================= JAVOB =================
+# ================= JAVOB BOSHLASH =================
 @router.callback_query(F.data.startswith("ans_"))
 async def answer_start(call: CallbackQuery, state: FSMContext):
-    await call.answer()
+    await call.answer("⏳ Yuklanmoqda...")
 
     if call.from_user.id in processing:
         return
@@ -77,18 +82,20 @@ async def a3(m: Message, state: FSMContext):
     await m.answer("📎 Fayl yubor:")
     await state.set_state(Answer.file)
 
+# ================= JAVOB YUBORISH =================
 @router.message(Answer.file)
 async def a4(m: Message, state: FSMContext):
-    data = await state.get_data()
-    cid = data["cid"]
+    try:
+        data = await state.get_data()
+        cid = data["cid"]
 
-    ap = get_appeal(cid)
-    if not ap:
-        return await m.answer("❌ Topilmadi")
+        ap = get_appeal(cid)
+        if not ap:
+            return await m.answer("❌ Topilmadi")
 
-    user_id = ap[2]  # 🔥 agar tuple ishlatayotgan bo‘lsang
+        user_id = ap["user_id"]  # 🔥 MUHIM FIX
 
-    text = f"""📨 JAVOB
+        text = f"""📨 JAVOB
 🆔 {cid}
 
 👤 {data['name']}
@@ -96,44 +103,79 @@ async def a4(m: Message, state: FSMContext):
 📞 {data['phone']}
 """
 
-    await m.bot.send_message(user_id, text)
+        await m.bot.send_message(user_id, text)
 
-    if m.document:
-        await m.bot.send_document(user_id, m.document.file_id)
-    elif m.photo:
-        await m.bot.send_photo(user_id, m.photo[-1].file_id)
+        if m.document:
+            await m.bot.send_document(user_id, m.document.file_id)
+        elif m.photo:
+            await m.bot.send_photo(user_id, m.photo[-1].file_id)
 
-    await m.answer("✅ Yuborildi")
-    await state.clear()
+        await m.answer("✅ Yuborildi")
+        await state.clear()
+
+    except Exception as e:
+        print("ERROR ANSWER:", e)
 
 # ================= QABUL =================
 @router.callback_query(F.data.startswith("ok_"))
 async def ok(call: CallbackQuery):
-    await call.answer()
+    await call.answer("⏳ Qabul qilinmoqda...")
 
-    cid = call.data.split("_")[1]
-    ap = get_appeal(cid)
-
-    if not ap:
+    if call.from_user.id in processing:
         return
 
-    update_status(cid, "Jarayonda")
+    processing.add(call.from_user.id)
 
-    await call.bot.send_message(ap[2], f"⏳ Jarayonda\n🆔 {cid}")
-    await call.message.answer("✅ Qabul qilindi")
+    try:
+        if not is_admin(call.from_user.id):
+            return
+
+        cid = call.data.split("_")[1]
+        ap = get_appeal(cid)
+
+        if not ap:
+            return
+
+        update_status(cid, "Jarayonda")
+
+        await call.bot.send_message(
+            ap["user_id"],  # 🔥 FIX
+            f"⏳ Jarayonda\n🆔 {cid}"
+        )
+
+        await call.message.answer("✅ Qabul qilindi")
+
+    finally:
+        processing.discard(call.from_user.id)
 
 # ================= RAD =================
 @router.callback_query(F.data.startswith("no_"))
 async def no(call: CallbackQuery):
-    await call.answer()
+    await call.answer("⏳ Rad etilmoqda...")
 
-    cid = call.data.split("_")[1]
-    ap = get_appeal(cid)
-
-    if not ap:
+    if call.from_user.id in processing:
         return
 
-    update_status(cid, "Rad etildi")
+    processing.add(call.from_user.id)
 
-    await call.bot.send_message(ap[2], f"❌ Rad etildi\n🆔 {cid}")
-    await call.message.answer("❌ Rad etildi")
+    try:
+        if not is_admin(call.from_user.id):
+            return
+
+        cid = call.data.split("_")[1]
+        ap = get_appeal(cid)
+
+        if not ap:
+            return
+
+        update_status(cid, "Rad etildi")
+
+        await call.bot.send_message(
+            ap["user_id"],  # 🔥 FIX
+            f"❌ Rad etildi\n🆔 {cid}"
+        )
+
+        await call.message.answer("❌ Rad etildi")
+
+    finally:
+        processing.discard(call.from_user.id)
