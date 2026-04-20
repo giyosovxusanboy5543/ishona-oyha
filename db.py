@@ -115,8 +115,8 @@ def is_admin(uid):
 
 
 # ================= APPEALS =================
-def add_appeal(data):
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+def add_appeal(data, custom_cid=None):
+    now = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
 
     with db() as c:
         safe_execute(c, """
@@ -125,7 +125,9 @@ def add_appeal(data):
         """, (*data, "Yangi", now))
 
         rid = c.lastrowid
-        cid = str(rid)
+
+        # 🔥 AGAR USER CUSTOM ID BERSA
+        cid = custom_cid if custom_cid else str(rid)
 
         safe_execute(
             c,
