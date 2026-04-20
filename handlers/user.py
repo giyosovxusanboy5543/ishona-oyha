@@ -1,15 +1,13 @@
-\from aiogram import Router, F
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
+from aiogram import Router, F
+from aiogram.types import *
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-from db import add_appeal, get_appeal, get_admins
+from db import add_appeal, get_admins
 from handlers.admin import buttons
 
 router = Router()
-
-# 🔥 DOUBLE CLICK & PARALLEL FIX
 processing = set()
 
 # ================= MENU =================
@@ -17,32 +15,6 @@ def menu():
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📩 Murojaat")],
-            [KeyboardButton(text="🔍 Tekshirish")],
-            [KeyboardButton(text="📍 Bizning manzil")]
-        ],
-        resize_keyboard=True
-    )
-
-def back_btn():
-    return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="⬅️ Orqaga")]],
-        resize_keyboard=True
-    )
-
-def phone_btn():
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="📞 Telefon yuborish", request_contact=True)],
-            [KeyboardButton(text="⬅️ Orqaga")]
-        ],
-        resize_keyboard=True
-    )
-
-def location_btn():
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="📍 Lokatsiya yuborish", request_location=True)],
-            [KeyboardButton(text="⬅️ Orqaga")]
         ],
         resize_keyboard=True
     )
@@ -50,65 +22,68 @@ def location_btn():
 # ================= STATES =================
 class Form(StatesGroup):
     name = State()
-    phone = State()
     address = State()
+    phone = State()
     message = State()
-
-class Check(StatesGroup):
-    cid = State()
+    file = State()
 
 # ================= START =================
 @router.message(Command("start"))
 async def start(m: Message):
-    await m.answer("Xizmatni tanlang:", reply_markup=menu())
+    await m.answer("📩 Murojaat yuborish uchun tugmani bosing", reply_markup=menu())
 
-# ================= ORQAGA =================
-@router.message(F.text == "⬅️ Orqaga")
-async def back(m: Message, state: FSMContext):
-    await state.clear()
-    await m.answer("Bosh menu", reply_markup=menu())
-
-# ================= MANZIL =================
-@router.message(F.text == "📍 Bizning manzil")
-async def location_info(m: Message):
-    await m.answer("📍 Xo‘jaobod tumani, Navoiy MFY,\nObihayot ko‘chasi, 1-uy")
-
-# ================= MUROJAAT =================
+# ================= BOSHLASH =================
 @router.message(F.text == "📩 Murojaat")
 async def start_form(m: Message, state: FSMContext):
     await state.clear()
-    await m.answer("👤 Ism Familya:", reply_markup=back_btn())
+    await m.answer("👤 Ismingizni kiriting\n\nMisol: <b>Bobur Qobulov</b>")
     await state.set_state(Form.name)
 
+# ================= ISM =================
 @router.message(Form.name)
 async def get_name(m: Message, state: FSMContext):
     await state.update_data(name=m.text)
-    await m.answer("📞 Telefon:", reply_markup=phone_btn())
+    await m.answer(
+        "📍 Qaysi MFY va manzilda yashaysiz?\n\n"
+        "Misol:\n<b>Bobur MFY, Olima ko‘chasi 9-uy</b>"
+    )
+    await state.set_state(Form.address)
+
+# ================= MANZIL =================
+@router.message(Form.address)
+async def get_address(m: Message, state: FSMContext):
+    await state.update_data(address=m.text)
+    await m.answer("📞 Telefon raqamingizni yuboring yoki yozing")
     await state.set_state(Form.phone)
 
+# ================= TELEFON =================
 @router.message(Form.phone)
 async def get_phone(m: Message, state: FSMContext):
     phone = m.contact.phone_number if m.contact else m.text
-    username = m.from_user.username or "yo‘q"
+    await state.update_data(phone=phone)
 
-    await state.update_data(phone=phone, username=username)
-    await m.answer("📍 Manzil:", reply_markup=location_btn())
-    await state.set_state(Form.address)
-
-@router.message(Form.address)
-async def get_address(m: Message, state: FSMContext):
-    address = (
-        f"{m.location.latitude},{m.location.longitude}"
-        if m.location else m.text
+    await m.answer(
+        "📝 Murojaat matnini yozing\n\n"
+        "Masalan:\n<b>Suv bosimi pastligi haqida murojaat qilaman</b>"
     )
-
-    await state.update_data(address=address)
-    await m.answer("📝 Murojaat:", reply_markup=back_btn())
     await state.set_state(Form.message)
 
-# ================= YUBORISH =================
+# ================= MATN =================
 @router.message(Form.message)
-async def send_appeal(m: Message, state: FSMContext):
+async def get_message(m: Message, state: FSMContext):
+    await state.update_data(message=m.text)
+
+    await m.answer(
+        "📎 Agar fayl biriktirmoqchi bo‘lsangiz yuboring\n\n"
+        "Qo‘llab-quvvatlanadi:\n"
+        "📄 PDF\n📊 Excel\n📝 Word\n🖼 JPG/PNG\n\n"
+        "❌ Agar yo‘q bo‘lsa 'yo‘q' deb yozing"
+    )
+    await state.set_state(Form.file)
+
+# ================= FILE =================
+@router.message(Form.file)
+async def finish(m: Message, state: FSMContext):
     if m.from_user.id in processing:
         return
 
@@ -122,65 +97,39 @@ async def send_appeal(m: Message, state: FSMContext):
             data["name"],
             data["phone"],
             data["address"],
-            m.text
+            data["message"]
         ))
 
         text = f"""📢 <b>YANGI MUROJAAT</b>
 🆔 {cid}
 
 👤 {data['name']}
-📞 {data['phone']}
-👤 @{data['username']}
 📍 {data['address']}
-📝 {m.text}
+📞 {data['phone']}
+
+📝 {data['message']}
 """
 
-        # 🔥 ADMINLARGA YUBORISH (SAFE)
+        # 🔥 ADMINLARGA YUBORISH
         for admin in get_admins():
             try:
-                await m.bot.send_message(
-                    admin,
-                    text,
-                    reply_markup=buttons(cid)
-                )
+                msg = await m.bot.send_message(admin, text, reply_markup=buttons(cid))
+
+                # FILE YUBORISH
+                if m.document:
+                    await m.bot.send_document(admin, m.document.file_id)
+                elif m.photo:
+                    await m.bot.send_photo(admin, m.photo[-1].file_id)
+
             except Exception as e:
                 print("ADMIN ERROR:", e)
 
-        await m.answer(
-            f"""✅ <b>Murojaatingiz qabul qilindi</b>
-🆔 {cid}
-
-📌 Javob tez orada beriladi
-""",
-            reply_markup=menu()
-        )
+        await m.answer(f"✅ Murojaatingiz qabul qilindi\n🆔 ID: {cid}")
 
         await state.clear()
 
     except Exception as e:
-        print("USER ERROR:", e)
+        print("ERROR:", e)
 
     finally:
         processing.discard(m.from_user.id)
-
-# ================= TEKSHIRISH =================
-@router.message(F.text == "🔍 Tekshirish")
-async def check_start(m: Message, state: FSMContext):
-    await m.answer("🆔 ID kiriting:", reply_markup=back_btn())
-    await state.set_state(Check.cid)
-
-@router.message(Check.cid)
-async def check_result(m: Message, state: FSMContext):
-    try:
-        ap = get_appeal(m.text.strip())
-
-        if ap:
-            status = ap[6] if len(ap) > 6 else "Noma'lum"
-            await m.answer(f"📊 Status: {status}", reply_markup=menu())
-        else:
-            await m.answer("❌ Topilmadi", reply_markup=menu())
-
-    except Exception as e:
-        print("CHECK ERROR:", e)
-
-    await state.clear()
