@@ -9,6 +9,9 @@ from handlers.admin import buttons
 
 router = Router()
 
+# 🔥 LOCK (parallel muammo yo‘q)
+processing = set()
+
 # ================= MENU =================
 def menu():
     return ReplyKeyboardMarkup(
@@ -73,87 +76,92 @@ async def location_info(m: Message):
 # ================= MUROJAAT =================
 @router.message(F.text == "📩 Murojaat")
 async def m1(m: Message, state: FSMContext):
-    await state.clear()  # 🔥 SERVER UCHUN MUHIM
+    await state.clear()
     await m.answer("👤 Ism Familya:", reply_markup=back_btn())
     await state.set_state(Form.name)
 
 @router.message(Form.name)
 async def m2(m: Message, state: FSMContext):
     await state.update_data(name=m.text)
-    await m.answer("📞 Telefon yuboring:", reply_markup=phone_btn())
+    await m.answer("📞 Telefon:", reply_markup=phone_btn())
     await state.set_state(Form.phone)
 
-# ================= TELEFON =================
 @router.message(Form.phone)
 async def m3(m: Message, state: FSMContext):
-    if m.contact:
-        phone = m.contact.phone_number
-    else:
-        phone = m.text
-
+    phone = m.contact.phone_number if m.contact else m.text
     username = m.from_user.username or "yo‘q"
 
     await state.update_data(phone=phone, username=username)
-    await m.answer("📍 Manzil yuboring:", reply_markup=location_btn())
+    await m.answer("📍 Manzil:", reply_markup=location_btn())
     await state.set_state(Form.address)
 
-# ================= MANZIL =================
 @router.message(Form.address)
 async def m4(m: Message, state: FSMContext):
-    if m.location:
-        address = f"{m.location.latitude}, {m.location.longitude}"
-    else:
-        address = m.text
+    address = (
+        f"{m.location.latitude},{m.location.longitude}"
+        if m.location else m.text
+    )
 
     await state.update_data(address=address)
-    await m.answer("📝 Murojaat matni:", reply_markup=back_btn())
+    await m.answer("📝 Murojaat:", reply_markup=back_btn())
     await state.set_state(Form.message)
 
 # ================= YUBORISH =================
 @router.message(Form.message)
 async def m5(m: Message, state: FSMContext):
-    data = await state.get_data()
+    if m.from_user.id in processing:
+        return
 
-    cid = add_appeal((
-        m.from_user.id,
-        data["name"],
-        data["phone"],
-        data["address"],
-        m.text
-    ))
+    processing.add(m.from_user.id)
 
-    text = f"""📢 <b>YANGI MUROJAAT</b>
+    try:
+        data = await state.get_data()
+
+        cid = add_appeal((
+            m.from_user.id,
+            data["name"],
+            data["phone"],
+            data["address"],
+            m.text
+        ))
+
+        text = f"""📢 <b>YANGI MUROJAAT</b>
 🆔 {cid}
 
 👤 {data['name']}
 📞 {data['phone']}
-👤 Username: @{data['username']}
+👤 @{data['username']}
 📍 {data['address']}
 📝 {m.text}
 """
 
-    # 🔥 SERVER SAFE (BOT YIQILMAYDI)
-    for admin in get_admins():
-        try:
-            await m.bot.send_message(
-                admin,
-                text,
-                reply_markup=buttons(cid)
-            )
-        except Exception as e:
-            print("ADMIN ERROR:", e)
+        # 🔥 ADMIN SAFE
+        for admin in get_admins():
+            try:
+                await m.bot.send_message(
+                    admin,
+                    text,
+                    reply_markup=buttons(cid)
+                )
+            except Exception as e:
+                print("ADMIN ERROR:", e)
 
-    await m.answer(
-        f"""✅ <b>Murojaatingiz qabul qilindi</b>
+        await m.answer(
+            f"""✅ <b>Qabul qilindi</b>
 🆔 {cid}
 
-📌 15–30 ish kun ichida javob beriladi.
-🙏 Rahmat!
+📌 Javob tez orada beriladi
 """,
-        reply_markup=menu()
-    )
+            reply_markup=menu()
+        )
 
-    await state.clear()
+        await state.clear()
+
+    except Exception as e:
+        print("ERROR USER:", e)
+
+    finally:
+        processing.discard(m.from_user.id)
 
 # ================= TEKSHIRISH =================
 @router.message(F.text == "🔍 Tekshirish")
@@ -163,11 +171,17 @@ async def c1(m: Message, state: FSMContext):
 
 @router.message(Check.cid)
 async def c2(m: Message, state: FSMContext):
-    ap = get_appeal(m.text)
+    try:
+        ap = get_appeal(m.text.strip())
 
-    if ap:
-        await m.answer(f"📊 Status: {ap[7]}", reply_markup=menu())
-    else:
-        await m.answer("❌ Topilmadi", reply_markup=menu())
+        if ap:
+            # 🔥 SAFE INDEX
+            status = ap[6] if len(ap) > 6 else "Noma'lum"
+            await m.answer(f"📊 Status: {status}", reply_markup=menu())
+        else:
+            await m.answer("❌ Topilmadi", reply_markup=menu())
+
+    except Exception as e:
+        print("ERROR CHECK:", e)
 
     await state.clear()
