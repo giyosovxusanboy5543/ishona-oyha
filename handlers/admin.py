@@ -3,14 +3,15 @@ from aiogram.types import *
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-from db import get_appeal, update_status, get_admins
+from db import get_appeal, update_status, get_admins, set_role
 
 router = Router()
-
-# 🔥 DOUBLE CLICK FIX
 processing = set()
 
-# 🔥 ADMIN CHECK
+# 🔥 SUPER ADMIN ID
+SUPER_ADMIN = 2034709966
+
+# ================= ADMIN CHECK =================
 def is_admin(uid):
     return uid in get_admins()
 
@@ -26,18 +27,67 @@ def buttons(cid):
         ]
     ])
 
-# ================= STATE =================
+# ================= STATES =================
+class AddAdmin(StatesGroup):
+    uid = State()
+
 class Answer(StatesGroup):
     cid = State()
     name = State()
     job = State()
     phone = State()
+    text = State()
     file = State()
+
+class Reject(StatesGroup):
+    cid = State()
+    reason = State()
+
+# ================= ADMIN PANEL =================
+@router.message(F.text == "⚙️ Admin panel")
+async def admin_panel(m: Message):
+    if m.from_user.id != SUPER_ADMIN:
+        return
+
+    kb = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="➕ Admin qo‘shish")],
+            [KeyboardButton(text="❌ Admin o‘chirish")]
+        ],
+        resize_keyboard=True
+    )
+
+    await m.answer("⚙️ Admin panel", reply_markup=kb)
+
+# ================= ADD ADMIN =================
+@router.message(F.text == "➕ Admin qo‘shish")
+async def add_admin_start(m: Message, state: FSMContext):
+    if m.from_user.id != SUPER_ADMIN:
+        return
+
+    await m.answer("🆔 Telegram ID yuboring:")
+    await state.set_state(AddAdmin.uid)
+
+@router.message(AddAdmin.uid)
+async def add_admin_finish(m: Message, state: FSMContext):
+    try:
+        uid = int(m.text)
+        set_role(uid, "admin")
+        await m.answer("✅ Admin qo‘shildi")
+    except:
+        await m.answer("❌ Noto‘g‘ri ID")
+
+    await state.clear()
+
+# ================= DELETE ADMIN =================
+@router.message(F.text == "❌ Admin o‘chirish")
+async def delete_admin(m: Message):
+    await m.answer("⚠️ Bu funksiya db.py da yozilishi kerak")
 
 # ================= JAVOB BOSHLASH =================
 @router.callback_query(F.data.startswith("ans_"))
 async def answer_start(call: CallbackQuery, state: FSMContext):
-    await call.answer("⏳ Yuklanmoqda...")
+    await call.answer()
 
     if call.from_user.id in processing:
         return
@@ -46,24 +96,24 @@ async def answer_start(call: CallbackQuery, state: FSMContext):
 
     try:
         if not is_admin(call.from_user.id):
-            return await call.message.answer("❌ Ruxsat yo‘q")
+            return
 
         cid = call.data.split("_")[1]
         ap = get_appeal(cid)
 
         if not ap:
-            return await call.message.answer("❌ Topilmadi")
+            return
 
         await state.clear()
         await state.update_data(cid=cid)
 
-        await call.message.answer("👤 Ism familya:")
+        await call.message.answer("👤 Mutaxassis ism familiya:")
         await state.set_state(Answer.name)
 
     finally:
         processing.discard(call.from_user.id)
 
-# ================= JAVOB DAVOMI =================
+# ================= JAVOB BOSQICHLARI =================
 @router.message(Answer.name)
 async def a1(m: Message, state: FSMContext):
     await state.update_data(name=m.text)
@@ -79,103 +129,113 @@ async def a2(m: Message, state: FSMContext):
 @router.message(Answer.phone)
 async def a3(m: Message, state: FSMContext):
     await state.update_data(phone=m.text)
-    await m.answer("📎 Fayl yubor:")
+    await m.answer("📝 Javob matni:")
+    await state.set_state(Answer.text)
+
+@router.message(Answer.text)
+async def a4(m: Message, state: FSMContext):
+    await state.update_data(text=m.text)
+    await m.answer("📎 Fayl yuborish (ixtiyoriy)")
     await state.set_state(Answer.file)
 
 # ================= JAVOB YUBORISH =================
 @router.message(Answer.file)
-async def a4(m: Message, state: FSMContext):
-    try:
-        data = await state.get_data()
-        cid = data["cid"]
+async def a5(m: Message, state: FSMContext):
+    data = await state.get_data()
+    cid = data["cid"]
 
-        ap = get_appeal(cid)
-        if not ap:
-            return await m.answer("❌ Topilmadi")
+    ap = get_appeal(cid)
+    if not ap:
+        return
 
-        user_id = ap["user_id"]  # 🔥 MUHIM FIX
+    text = f"""📨 <b>RASMИЙ JAVOB</b>
 
-        text = f"""📨 JAVOB
 🆔 {cid}
 
-👤 {data['name']}
-💼 {data['job']}
-📞 {data['phone']}
+👤 Mutaxassis: {data['name']}
+💼 Lavozimi: {data['job']}
+📞 Telefon: {data['phone']}
+
+📝 {data['text']}
+
+📌 Eslatma:
+Mazkur javobdan norozi bo‘lgan taqdiringizda yuqori turuvchi organlarga murojaat qilish huquqiga egasiz.
+
+🏢 Hurmat bilan,
+Xo‘jaobod tumani suv ta’minoti AJ
+
+📍 Manzil:
+Navoiy MFY, Obihayot ko‘chasi 1-uy
 """
 
-        await m.bot.send_message(user_id, text)
+    await m.bot.send_message(ap["user_id"], text)
 
-        if m.document:
-            await m.bot.send_document(user_id, m.document.file_id)
-        elif m.photo:
-            await m.bot.send_photo(user_id, m.photo[-1].file_id)
+    if m.document:
+        await m.bot.send_document(ap["user_id"], m.document.file_id)
+    elif m.photo:
+        await m.bot.send_photo(ap["user_id"], m.photo[-1].file_id)
 
-        await m.answer("✅ Yuborildi")
-        await state.clear()
-
-    except Exception as e:
-        print("ERROR ANSWER:", e)
+    await m.answer("✅ Javob yuborildi")
+    await state.clear()
 
 # ================= QABUL =================
 @router.callback_query(F.data.startswith("ok_"))
 async def ok(call: CallbackQuery):
-    await call.answer("⏳ Qabul qilinmoqda...")
+    await call.answer()
 
-    if call.from_user.id in processing:
+    if not is_admin(call.from_user.id):
         return
 
-    processing.add(call.from_user.id)
+    cid = call.data.split("_")[1]
+    ap = get_appeal(cid)
 
-    try:
-        if not is_admin(call.from_user.id):
-            return
+    if not ap:
+        return
 
-        cid = call.data.split("_")[1]
-        ap = get_appeal(cid)
+    update_status(cid, "Jarayonda")
 
-        if not ap:
-            return
+    await call.bot.send_message(
+        ap["user_id"],
+        f"⏳ Murojaatingiz ko‘rib chiqilmoqda\n🆔 {cid}"
+    )
 
-        update_status(cid, "Jarayonda")
-
-        await call.bot.send_message(
-            ap["user_id"],  # 🔥 FIX
-            f"⏳ Jarayonda\n🆔 {cid}"
-        )
-
-        await call.message.answer("✅ Qabul qilindi")
-
-    finally:
-        processing.discard(call.from_user.id)
+    await call.message.answer("✅ Qabul qilindi")
 
 # ================= RAD =================
 @router.callback_query(F.data.startswith("no_"))
-async def no(call: CallbackQuery):
-    await call.answer("⏳ Rad etilmoqda...")
+async def reject_start(call: CallbackQuery, state: FSMContext):
+    await call.answer()
 
-    if call.from_user.id in processing:
+    if not is_admin(call.from_user.id):
         return
 
-    processing.add(call.from_user.id)
+    cid = call.data.split("_")[1]
 
-    try:
-        if not is_admin(call.from_user.id):
-            return
+    await state.update_data(cid=cid)
+    await call.message.answer("❌ Rad sababini yozing:")
+    await state.set_state(Reject.reason)
 
-        cid = call.data.split("_")[1]
-        ap = get_appeal(cid)
+@router.message(Reject.reason)
+async def reject_finish(m: Message, state: FSMContext):
+    data = await state.get_data()
+    cid = data["cid"]
 
-        if not ap:
-            return
+    ap = get_appeal(cid)
+    if not ap:
+        return
 
-        update_status(cid, "Rad etildi")
+    update_status(cid, "Rad etildi")
 
-        await call.bot.send_message(
-            ap["user_id"],  # 🔥 FIX
-            f"❌ Rad etildi\n🆔 {cid}"
-        )
+    await m.bot.send_message(
+        ap["user_id"],
+        f"""❌ Murojaatingiz rad etildi
 
-        await call.message.answer("❌ Rad etildi")
+🆔 {cid}
 
-    finally:
-        processing.discard(call.from_user.id)
+📌 Sabab:
+{m.text}
+"""
+    )
+
+    await m.answer("❌ Rad etildi")
+    await state.clear()
