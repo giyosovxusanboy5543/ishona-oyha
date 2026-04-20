@@ -12,21 +12,24 @@ from handlers.admin import buttons
 router = Router()
 processing = set()
 
-# ================= UX MENU =================
+# ================= MENU (UX DESIGN) =================
 def menu():
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📩 Murojaat yuborish")],
             [
-                KeyboardButton(text="🔍 Holat tekshirish"),
-                KeyboardButton(text="📍 Manzil")
-            ],
-            [
-                KeyboardButton(text="📞 Raqam yuborish", request_contact=True)
+                KeyboardButton(text="🔍 Murojaat holatini tekshirish"),
+                KeyboardButton(text="📍 Bizning manzil")
             ]
         ],
         resize_keyboard=True,
         input_field_placeholder="Kerakli bo‘limni tanlang 👇"
+    )
+
+def back_btn():
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="⬅️ Orqaga")]],
+        resize_keyboard=True
     )
 
 # ================= STATES =================
@@ -39,52 +42,61 @@ class Form(StatesGroup):
 class Check(StatesGroup):
     cid = State()
 
-# ================= START =================
+# ================= START (PRO DESIGN) =================
 @router.message(Command("start"))
 async def start(m: Message):
     await m.answer(
-        "👋 Assalomu alaykum!\n\n"
-        "Xo‘jaobod suv ta’minoti botiga xush kelibsiz.\n"
-        "Quyidagi menyudan foydalaning 👇",
+        f"""🏢 <b>Xo‘jaobod tumani suv ta’minoti AJ</b>
+
+📢 <b>Rasmiy murojaat qabul qilish boti</b>
+
+━━━━━━━━━━━━━━━━━━━
+
+👋 Assalomu alaykum!
+
+Ushbu bot orqali siz:
+
+📩 Murojaat yuborishingiz  
+🔍 Murojaatingiz holatini tekshirishingiz  
+📍 Bizning manzilni bilishingiz mumkin  
+
+━━━━━━━━━━━━━━━━━━━
+
+📌 <b>Eslatma:</b>
+Murojaatlar qonunchilik asosida 15–30 kun ichida ko‘rib chiqiladi.
+
+👇 Davom etish uchun menyudan tanlang""",
         reply_markup=menu()
     )
 
+# ================= BACK =================
+@router.message(F.text == "⬅️ Orqaga")
+async def back(m: Message, state: FSMContext):
+    await state.clear()
+    await m.answer("🔙 Asosiy menyu", reply_markup=menu())
+
 # ================= MANZIL =================
-@router.message(F.text == "📍 Manzil")
+@router.message(F.text == "📍 Bizning manzil")
 async def location(m: Message):
     await m.answer(
-        "📍 <b>Bizning manzil:</b>\n\n"
-        "🏢 Navoiy MFY\n"
-        "📌 Obihayot ko‘chasi 1-uy"
+        """📍 <b>Bizning manzil:</b>
+
+🏢 Xo‘jaobod tumani
+📌 Navoiy MFY
+📍 Obihayot ko‘chasi 1-uy"""
     )
 
-# ================= CONTACT =================
-@router.message(F.contact)
-async def contact_handler(m: Message, state: FSMContext):
-    await state.update_data(phone=m.contact.phone_number)
-    await m.answer("✅ Raqamingiz qabul qilindi")
-
-# ================= MUROJAAT BOSHLASH =================
+# ================= MUROJAAT =================
 @router.message(F.text == "📩 Murojaat yuborish")
 async def start_form(m: Message, state: FSMContext):
     await state.clear()
-
-    await m.answer(
-        "👤 <b>Ism familiyangizni kiriting</b>\n\n"
-        "Masalan: <i>Bobur Qobulov</i>"
-    )
-
+    await m.answer("👤 Ism familiyangizni kiriting:", reply_markup=back_btn())
     await state.set_state(Form.name)
 
 @router.message(Form.name)
 async def get_name(m: Message, state: FSMContext):
     await state.update_data(name=m.text)
-
-    await m.answer(
-        "📍 <b>Manzilingizni kiriting</b>\n\n"
-        "Masalan:\n<i>Bobur MFY, Olima ko‘chasi 9-uy</i>"
-    )
-
+    await m.answer("📍 Manzilingizni kiriting:", reply_markup=back_btn())
     await state.set_state(Form.address)
 
 @router.message(Form.address)
@@ -93,30 +105,26 @@ async def get_address(m: Message, state: FSMContext):
 
     kb = ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="📞 Raqam yuborish", request_contact=True)]
+            [KeyboardButton(text="📞 Raqam yuborish", request_contact=True)],
+            [KeyboardButton(text="⬅️ Orqaga")]
         ],
         resize_keyboard=True
     )
 
-    await m.answer(
-        "📞 <b>Telefon raqamingizni yuboring</b>\n"
-        "yoki yozib kiriting",
-        reply_markup=kb
-    )
-
+    await m.answer("📞 Telefon raqamingizni yuboring:", reply_markup=kb)
     await state.set_state(Form.phone)
+
+# 🔥 CONTACT FIX
+@router.message(Form.phone, F.contact)
+async def contact_handler(m: Message, state: FSMContext):
+    await state.update_data(phone=m.contact.phone_number)
+    await m.answer("📝 Muammo haqida yozing:", reply_markup=back_btn())
+    await state.set_state(Form.message)
 
 @router.message(Form.phone)
 async def get_phone(m: Message, state: FSMContext):
-    phone = m.contact.phone_number if m.contact else m.text
-    await state.update_data(phone=phone)
-
-    await m.answer(
-        "📝 <b>Muammo haqida yozing</b>\n\n"
-        "Masalan:\n"
-        "Suv bosimi past, 3 kundan beri muammo bor"
-    )
-
+    await state.update_data(phone=m.text)
+    await m.answer("📝 Muammo haqida yozing:", reply_markup=back_btn())
     await state.set_state(Form.message)
 
 # ================= FINAL =================
@@ -130,7 +138,6 @@ async def finish(m: Message, state: FSMContext):
     try:
         data = await state.get_data()
 
-        # UNIQUE ID
         rand = random.randint(10000, 99999)
         year = datetime.now().year % 100
         cid = f"{rand}-r/{year}"
@@ -143,7 +150,7 @@ async def finish(m: Message, state: FSMContext):
             data["phone"],
             data["address"],
             m.text
-        ))
+        ), cid)
 
         text = f"""📢 <b>YANGI MUROJAAT</b>
 
@@ -163,7 +170,7 @@ async def finish(m: Message, state: FSMContext):
         await m.answer(
             f"""✅ <b>Murojaatingiz qabul qilindi</b>
 
-🆔 ID: <b>{cid}</b>
+🆔 {cid}
 🕒 {now}
 
 📅 Ko‘rib chiqish muddati:
@@ -182,23 +189,24 @@ Navoiy MFY, Obihayot ko‘chasi 1-uy
         processing.discard(m.from_user.id)
 
 # ================= TEKSHIRISH =================
-@router.message(F.text == "🔍 Holat tekshirish")
+@router.message(F.text == "🔍 Murojaat holatini tekshirish")
 async def check_start(m: Message, state: FSMContext):
-    await m.answer("🆔 ID ni kiriting:")
+    await m.answer("🆔 ID kiriting:", reply_markup=back_btn())
     await state.set_state(Check.cid)
 
 @router.message(Check.cid)
 async def check_result(m: Message, state: FSMContext):
-    ap = get_appeal(m.text)
+    ap = get_appeal(m.text.strip())
 
     if not ap:
-        return await m.answer("❌ Murojaat topilmadi")
+        return await m.answer("❌ Murojaat topilmadi", reply_markup=menu())
 
     await m.answer(
         f"""📊 <b>Murojaat holati</b>
 
-🆔 {m.text}
-📌 Status: <b>{ap['status']}</b>
+🆔 {ap['cid']}
+📌 Status: {ap['status']}
+🕒 {ap['created']}
 """,
         reply_markup=menu()
     )
