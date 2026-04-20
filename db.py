@@ -14,7 +14,7 @@ def get_conn():
     conn = sqlite3.connect(DB_NAME, check_same_thread=False)
     conn.row_factory = sqlite3.Row
 
-    # 🔥 PERFORMANCE (MUHIM)
+    # 🔥 PERFORMANCE
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA synchronous=NORMAL;")
     conn.execute("PRAGMA temp_store=MEMORY;")
@@ -77,7 +77,7 @@ def init_db():
         )
         """)
 
-        # 🔥 INDEX (TEZLIK)
+        # 🔥 INDEX
         c.execute("CREATE INDEX IF NOT EXISTS idx_cid ON appeals(cid)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_status ON appeals(status)")
 
@@ -89,6 +89,15 @@ def set_role(uid, role):
             c,
             "INSERT OR REPLACE INTO users (id, role) VALUES (?,?)",
             (int(uid), role)
+        )
+
+
+def delete_admin(uid):
+    with db() as c:
+        safe_execute(
+            c,
+            "DELETE FROM users WHERE id=? AND role='admin'",
+            (int(uid),)
         )
 
 
@@ -118,7 +127,8 @@ def add_appeal(data):
         rid = c.lastrowid
         cid = str(rid)
 
-        safe_execute(c,
+        safe_execute(
+            c,
             "UPDATE appeals SET cid=? WHERE id=?",
             (cid, rid)
         )
