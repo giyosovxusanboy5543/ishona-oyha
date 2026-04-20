@@ -1,4 +1,4 @@
-from aiogram import Router, F
+\from aiogram import Router, F
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -9,7 +9,7 @@ from handlers.admin import buttons
 
 router = Router()
 
-# 🔥 LOCK (parallel muammo yo‘q)
+# 🔥 DOUBLE CLICK & PARALLEL FIX
 processing = set()
 
 # ================= MENU =================
@@ -75,19 +75,19 @@ async def location_info(m: Message):
 
 # ================= MUROJAAT =================
 @router.message(F.text == "📩 Murojaat")
-async def m1(m: Message, state: FSMContext):
+async def start_form(m: Message, state: FSMContext):
     await state.clear()
     await m.answer("👤 Ism Familya:", reply_markup=back_btn())
     await state.set_state(Form.name)
 
 @router.message(Form.name)
-async def m2(m: Message, state: FSMContext):
+async def get_name(m: Message, state: FSMContext):
     await state.update_data(name=m.text)
     await m.answer("📞 Telefon:", reply_markup=phone_btn())
     await state.set_state(Form.phone)
 
 @router.message(Form.phone)
-async def m3(m: Message, state: FSMContext):
+async def get_phone(m: Message, state: FSMContext):
     phone = m.contact.phone_number if m.contact else m.text
     username = m.from_user.username or "yo‘q"
 
@@ -96,7 +96,7 @@ async def m3(m: Message, state: FSMContext):
     await state.set_state(Form.address)
 
 @router.message(Form.address)
-async def m4(m: Message, state: FSMContext):
+async def get_address(m: Message, state: FSMContext):
     address = (
         f"{m.location.latitude},{m.location.longitude}"
         if m.location else m.text
@@ -108,7 +108,7 @@ async def m4(m: Message, state: FSMContext):
 
 # ================= YUBORISH =================
 @router.message(Form.message)
-async def m5(m: Message, state: FSMContext):
+async def send_appeal(m: Message, state: FSMContext):
     if m.from_user.id in processing:
         return
 
@@ -135,7 +135,7 @@ async def m5(m: Message, state: FSMContext):
 📝 {m.text}
 """
 
-        # 🔥 ADMIN SAFE
+        # 🔥 ADMINLARGA YUBORISH (SAFE)
         for admin in get_admins():
             try:
                 await m.bot.send_message(
@@ -147,7 +147,7 @@ async def m5(m: Message, state: FSMContext):
                 print("ADMIN ERROR:", e)
 
         await m.answer(
-            f"""✅ <b>Qabul qilindi</b>
+            f"""✅ <b>Murojaatingiz qabul qilindi</b>
 🆔 {cid}
 
 📌 Javob tez orada beriladi
@@ -158,30 +158,29 @@ async def m5(m: Message, state: FSMContext):
         await state.clear()
 
     except Exception as e:
-        print("ERROR USER:", e)
+        print("USER ERROR:", e)
 
     finally:
         processing.discard(m.from_user.id)
 
 # ================= TEKSHIRISH =================
 @router.message(F.text == "🔍 Tekshirish")
-async def c1(m: Message, state: FSMContext):
+async def check_start(m: Message, state: FSMContext):
     await m.answer("🆔 ID kiriting:", reply_markup=back_btn())
     await state.set_state(Check.cid)
 
 @router.message(Check.cid)
-async def c2(m: Message, state: FSMContext):
+async def check_result(m: Message, state: FSMContext):
     try:
         ap = get_appeal(m.text.strip())
 
         if ap:
-            # 🔥 SAFE INDEX
             status = ap[6] if len(ap) > 6 else "Noma'lum"
             await m.answer(f"📊 Status: {status}", reply_markup=menu())
         else:
             await m.answer("❌ Topilmadi", reply_markup=menu())
 
     except Exception as e:
-        print("ERROR CHECK:", e)
+        print("CHECK ERROR:", e)
 
     await state.clear()
