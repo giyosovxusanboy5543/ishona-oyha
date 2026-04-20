@@ -7,6 +7,9 @@ from db import get_appeal, update_status, is_admin
 
 router = Router()
 
+# 🔥 CLICK LOCK (DOUBLE CLICK OLDINI OLADI)
+processing = set()
+
 # ================= TUGMALAR =================
 def buttons(cid):
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -26,9 +29,14 @@ class Answer(StatesGroup):
 # ================= JAVOB =================
 @router.callback_query(F.data.startswith("ans_"))
 async def answer_start(call: CallbackQuery, state: FSMContext):
-    try:
-        await call.answer()
+    await call.answer("⏳ Yuklanmoqda...")
 
+    if call.from_user.id in processing:
+        return
+
+    processing.add(call.from_user.id)
+
+    try:
         if not is_admin(call.from_user.id):
             return await call.message.answer("❌ Ruxsat yo‘q")
 
@@ -46,6 +54,9 @@ async def answer_start(call: CallbackQuery, state: FSMContext):
 
     except Exception as e:
         print("ERROR ans_start:", e)
+
+    finally:
+        processing.discard(call.from_user.id)
 
 
 @router.message(Answer.name)
@@ -82,7 +93,7 @@ async def a4(m: Message, state: FSMContext):
         if not ap:
             return await m.answer("❌ Topilmadi")
 
-        user_id = ap["user_id"]  # 🔥 FIX
+        user_id = ap["user_id"]
 
         text = f"""📨 JAVOB
 🆔 {cid}
@@ -109,9 +120,14 @@ async def a4(m: Message, state: FSMContext):
 # ================= QABUL =================
 @router.callback_query(F.data.startswith("ok_"))
 async def ok(call: CallbackQuery):
-    try:
-        await call.answer()
+    await call.answer("⏳ Qabul qilinmoqda...")
 
+    if call.from_user.id in processing:
+        return
+
+    processing.add(call.from_user.id)
+
+    try:
         if not is_admin(call.from_user.id):
             return await call.message.answer("❌ Ruxsat yo‘q")
 
@@ -124,7 +140,7 @@ async def ok(call: CallbackQuery):
         update_status(cid, "Jarayonda")
 
         await call.bot.send_message(
-            ap["user_id"],  # 🔥 FIX
+            ap["user_id"],
             f"⏳ Jarayonda\n🆔 {cid}"
         )
 
@@ -133,13 +149,21 @@ async def ok(call: CallbackQuery):
     except Exception as e:
         print("ERROR OK:", e)
 
+    finally:
+        processing.discard(call.from_user.id)
+
 
 # ================= RAD =================
 @router.callback_query(F.data.startswith("no_"))
 async def no(call: CallbackQuery):
-    try:
-        await call.answer()
+    await call.answer("⏳ Rad etilmoqda...")
 
+    if call.from_user.id in processing:
+        return
+
+    processing.add(call.from_user.id)
+
+    try:
         if not is_admin(call.from_user.id):
             return await call.message.answer("❌ Ruxsat yo‘q")
 
@@ -152,7 +176,7 @@ async def no(call: CallbackQuery):
         update_status(cid, "Rad etildi")
 
         await call.bot.send_message(
-            ap["user_id"],  # 🔥 FIX
+            ap["user_id"],
             f"❌ Rad etildi\n🆔 {cid}"
         )
 
@@ -160,6 +184,9 @@ async def no(call: CallbackQuery):
 
     except Exception as e:
         print("ERROR NO:", e)
+
+    finally:
+        processing.discard(call.from_user.id)
 
 
 # ================= DEBUG =================
